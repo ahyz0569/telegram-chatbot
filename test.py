@@ -3,8 +3,6 @@ from decouple import config
 # 외부에서 token을 변수화 해서 저장한 값을 불러와서 사용
 token = config('TELEGRAM_BOT_TOKEN')
 
-token = '1016852222:AAGCGCJAtwiVqbtoU8DeefaHcz4gfONmDYk'
-
 # url : f'https://api.telegram.org/bot{token}/{사용할METHOD명}
 url = f'https://api.telegram.org/bot{token}/getUpdates'
 
