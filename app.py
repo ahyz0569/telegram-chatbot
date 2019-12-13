@@ -37,6 +37,12 @@ def send():
 
     return render_template('send.html')
 
+# @app.route(f'/{token}', methods=['POST'])
+@app.route('/telegram', methods=['POST'])
+def telegram():
+    # status code 200: 요청 성공을 의미
+    return 'ok', 200
+
 # python app.py 로 실행
 if __name__ == '__main__':
     app.run(debug=True)
