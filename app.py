@@ -1,5 +1,6 @@
 from flask import Flask, escape, request, render_template
 from decouple import config
+from bs4 import BeautifulSoup
 import requests
 import random, re
 
@@ -9,7 +10,7 @@ api_url = 'https://api.telegram.org/bot'
 token = config('TELEGRAM_BOT_TOKEN')
 google_key = config('GOOGLE_KEY')
 open_weather_api_key = config('OPEN_WEATHER_MAP_API')
-
+airkorea_api_key = config('AIRKOREA_OPEN_API')
 
 @app.route('/')
 def hello():
@@ -55,6 +56,7 @@ def telegram():
 
     # user_input 값에서 찾을 문자열 패턴
     greeting = re.compile("안녕")
+    pinedust_check = re.compile("미세먼지")
 
     # 로또 번호 추천 기능 구현
     if user_input == "로또":
@@ -96,16 +98,68 @@ def telegram():
         temp = round(temp, 3)
 
         return_data = f"오늘의 날씨는 {weather_state}이며 기온은 {temp} 도 입니다."
+    
+    # 미세 먼지 정보 알림 기능 구현
+    # 서울시 지역구 별로 정보 조회가 가능하게끔 구현함
+    elif pinedust_check(user_input) :
+
+        # 서울시 미세먼지 측정소 정보 리스트
+        seoul_gu_list = ['강남구', '강동구', '강북구', '강서구', '관악구', '광진구', '구로구', '금천구', '노원구',
+                        '도봉구', '동대문구', '동작구', '마포구', '서대문구', '서초구', '성동구', '성북구', '송파구', 
+                        '양천구', '영등포구', '용산구', '은평구', '종로구', '중구', '중랑구']
+        stationName = ''
+        # '/' 를 기준으로 입력한 지역구명와 seoul_gu_list내에 있는 지역구명을 비교함
+        input_station = user_input.split('/')[1]
+        for gu in seoul_gu_list:
+            if gu == input_station:
+                stationName = gu
+                break
+        
+        # 유저가 입력한 지역구명에 오타가 있을 경우 재입력 메세지 노출
+        if stationName == '':
+            return_data = '지역구명을 잘못 입력하셨습니다. 명령어를 다시 입력해주세요.'
+
+        else:    
+            # 시도별 실시간 측정정보 조회 : http://openapi.airkorea.or.kr/openapi/services/rest/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty?sidoName=%EC%84%9C%EC%9A%B8&dataTerm=daily&numOfRows=40&ServiceKey={서비스키}&ver=1.3
+            # 측정소별 실시간 측정정보 조회 url
+            airkorea_api_url = 'http://openapi.airkorea.or.kr/openapi/services/rest/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty?&dataTerm=daily&ver=1.3'
+            request_url = f'{airkorea_api_url}&ServiceKey={airkorea_api_key}&stationName={stationName}'
+
+            res = requests.get(request_url).text
+            soup = BeautifulSoup(res, 'xml')
+            dust_info = soup.find('item')
+            
+            # 요청 기준 제일 최근에 조회되는 미세먼지 정보 추출
+            time = dust_info.dataTime.text
+            dust = int(dust_info.pm10Value.text)
+            dust_grade = dust_info.pm10Grade1h.text
+
+            # 미세먼지등급
+            if dust_grade == '1':
+                grade = '좋음'
+            elif dust_grade == '2':
+                grade = '보통'
+            elif dust_grade == '3':
+                grade = '나쁨'
+            else:
+                grade = '매우 나쁨'
+        
+            return_data = f"{time} 기준 {stationName}의 미세먼지 농도는 {dust}이며 대기 상태는 {grade} 입니다."
 
     # 인사 기능 구현
     elif greeting.search(user_input) :
-        return_data = "안녕하세요 :) 사용가능한 명령어는 '로또', '번역' 입니다. \n" \
-                    + "로또: 로또번호를 추천해드립니다. \n" \
-                    + "번역: 번역할 문장 앞에 `번역 ` 을 입력하면 영어로 번역해드립니다. \n"
-                    + "오늘의 날씨: 오늘의 날씨 상태와 기온을 알려드립니다."
+        return_data = "안녕하세요 :) 사용가능한 명령어는 '로또', '번역', '오늘의 날씨', '미세먼지' 입니다. \n" \
+                    + "★ 로또: 로또번호를 추천해드립니다. \n" \
+                    + "★ 번역: 번역할 문장 앞에 `번역 ` 을 입력하면 영어로 번역해드립니다. \n" \
+                    + "★ 오늘의 날씨: 오늘의 날씨 상태와 기온을 알려드립니다. \n" \
+                    + "★ 미세먼지: `미세먼지/(지역구명)` 로 입력하시면 해당 지역구의 실시간 미세먼지 정보를 알려드립니다."
 
     else:
-        return_data = "사용가능한 명령어는 '로또', '번역', '오늘의 날씨' 입니다. 명령어를 다시 입력해주세요."
+        return_data = "사용가능한 명령어는 '로또', '번역', '오늘의 날씨' 입니다. 명령어를 다시 입력해주세요. \n" \
+                    + "★ 로또: 로또번호를 추천해드립니다. \n" \
+                    + "★ 번역: 번역할 문장 앞에 `번역 ` 을 입력하면 영어로 번역해드립니다. \n" \
+                    + "★ 오늘의 날씨: 오늘의 날씨 상태와 기온을 알려드립니다. \n" \
+                    + "★ 미세먼지: `미세먼지/(지역구명)` 로 입력하시면 해당 지역구의 실시간 미세먼지 정보를 알려드립니다."
 
     #sendMessage Method 사용요청
     send_url = f'https://api.telegram.org/bot{token}/sendMessage?text={return_data}&chat_id={user_id}'
